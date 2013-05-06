@@ -15,12 +15,11 @@ from osgeo import gdal_array
 from osgeo import gdalconst
 
 from mpi4py import MPI
+from mpi4py.MPI import ANY_SOURCE
 
 comm = MPI.COMM_WORLD
-size = comm.size
-rank = comm.rank
-mode = MPI.MODE_CREATE | MPI.MODE_WRONLY
-
+size = comm.Get_size()
+rank = comm.Get_rank()
 
 class Stack:
 	##########
@@ -82,12 +81,12 @@ class Stack:
 		if not os.path.exists(stack_filename):
 			print stack_filename + " does not exist!"
 
-		print "Loading stack from " + stack_filename + "..."
+		#print "Loading stack from " + stack_filename + "..."
 		self.stack_file = stack_filename
 		self.stack = np.recfromcsv(stack_filename, delimiter=',', names=True, dtype="string")
 
 		total_time = time.time() - start_time
-		print "Loaded stack from " + stack_filename
+		#print "Loaded stack from " + stack_filename
 
 
 	##########
@@ -100,7 +99,7 @@ class Stack:
 		if not os.path.exists(shelf_file):
 			return( [False, total_time, shelf_file + " does not exist"] )
 
-		print "Loading shelf objects from " + shelf_file + "..."
+		#print "Loading shelf objects from " + shelf_file + "..."
 		self.clf_shelf_file = shelf_file
 		my_shelf = shelve.open(shelf_file)
 		self.clf = my_shelf['clf']
@@ -120,9 +119,9 @@ class Stack:
 		self.n_input_datasets = self.stack.shape[0]
 
 		# arrays to hold dataset and band objects
-		print 'Input file count is', self.n_input_datasets
+		#print 'Input file count is', self.n_input_datasets
 
-		print 'Creating arrays for input datasets and bands...'
+		#print 'Creating arrays for input datasets and bands...'
 		self.input_datasets = np.empty((self.n_input_datasets), dtype=object)
 		self.input_bands = np.empty((self.n_input_datasets, len(self.input_band_names)), dtype=object)
 
@@ -590,20 +589,16 @@ def processBlock(in_block):
 	total_time = -1
 		
 	status = in_block.calculateSpectralIndices()
-	print "Calculated Spectral Indicies"
-	print status
+	#print status
 
 	status = in_block.calculateSeasonalSummaries()
-	print "Calculated Seasonal Summaries"
-	print status
+	#print status
 
 	status = in_block.calculateBurnProbabilities()
-	print "Calculated Burn Probabilities"
-	print status
+	#print status
 
 	status = in_block.classifyBurnProbabilities()
-	print "Classified Burn Probabilities"
-	print status
+	#print status
 
 	# empty all the input and intermediate data arrays in my_block before returing to main loop
 	total_time = time.time() - start_time
@@ -633,59 +628,75 @@ if __name__ == "__main__":
 	my_stack.openClassifier(my_shelf_file)
 
 	status = my_stack.openInputDatasets()
-	print status
+	#print status
 
 	status = my_stack.openOutputDatasets()
-	print status
+	#print status
 
 	##########
 	# loop through 'blocks' in the images
 	##########
-	#block_rows = 256
+	max_row = my_stack.nRow
+	max_col = my_stack.nCol
+	block_rows = size * 32
+	if block_rows > 128:
+		block_rows = 128
 	#block_cols = 256
-	print "Size is %i" % size
-	block_rows = size - 1
-	block_cols = 7371
-	
-	for startRow in range(0, my_stack.nRow, block_rows):
-		endRow = startRow + block_rows
-		if endRow > my_stack.nRow:
-			endRow = my_stack.nRow
+	block_cols = my_stack.nCol / size 
+	if block_cols > 128:
+		block_cols = 128
+	#start_row = 0
+	#start_col = 0
+	#print "max_row %d" %max_row
+	#print "max_col %d" %max_col
 
-		for startCol in range(0, my_stack.nCol, block_cols):
-			endCol = startCol + block_cols
-			if endCol > my_stack.nCol:
-				endCol = my_stack.nCol
+	#while ( start_row <= max_row ):
+	for start_row in range(0, max_row, block_rows):
+		startRow = comm.bcast(start_row, root=0)
 
-			print "########################################"
-			print 'Processing rows:' + str(startRow) + "-" + str(endRow) + " and columns:" + str(startCol) + "-" + str(endCol) + "..."
-			result = my_stack.readBlock(startCol, endCol, startRow, endRow)
-			print result[1:3]
-			#in_block = result[0]
+		#while ( start_col <= max_col ):
+		for start_col in range(0, max_col, (block_cols * size) ):
+			#end_col = start_col + (block_cols * size)
+			#x_axis = range(start_col, end_col, block_cols)
+			#startCol = comm.scatter(x_axis, root=0)
+			startCol = comm.bcast(start_col, root=0)
 
-			##########
-			# Start multithreading
-			##########
-			# Do we scatter here?
-			# Scatter now
-			if rank == 0:
+			endRow = startRow + block_rows - 1
+			if endRow > max_row:
+				endRow = max_row
+
+			startCol = startCol + (block_cols * rank)
+				#startCol = max_col
+			endCol = startCol + block_cols - 1
+			if endCol > max_col:
+				endCol = max_col
+
+			if ( startCol < max_col ) & ( startRow < max_row ):
+				print "Goody"	
+				print "startCol is", startCol
+				print "Doing", block_cols, "number of columns"	
+				
+				print "########################################"
+				print "Rank " + str(rank) + " is Processing rows:" + str(startRow) + "-" + str(endRow) + " and columns:" + str(startCol) + "-" + str(endCol) + "..."
+				
+				result = my_stack.readBlock(startCol, endCol, startRow, endRow)
+				#print result[1:3]
 				in_block = result[0]
-			else:
-				in_block = None
-			comm.scatter(in_block, local_in_block, root=0)
-			print "Scatter results: Rank" + rank + "in_block" + in_block
 
-			result = processBlock(in_block)
-			print "Within Multithreading Section"
-			print result[1:3]
-			out_block = result[0]
+				##########
+				# Start multithreading
+				##########
+				result = processBlock(in_block)
+				#print result[1:3]
+				out_block = result[0]
 			
-			##########
-			# stop multithreading here
-			##########
-			status = my_stack.writeBlock(out_block)
-			print "Out of Multithreading"
-			print status
+				##########
+				# stop multithreading here
+				##########
+				status = my_stack.writeBlock(out_block)
+				#print status
+
+
 
 	##########
 	# stop looping here
@@ -693,7 +704,9 @@ if __name__ == "__main__":
 	status = my_stack.closeOutputData()
 	print status
 
-	end_time0 = time.time()
-	print 'Done! Total processing time = ' + str((end_time0 - start_time0)/60) + ' minutes.'
-	
+	if rank == 0:
+		end_time0 = time.time()
+		print 'Done! Total processing time = ' + str((end_time0 - start_time0)/60) + ' minutes.'
+
 	sys.exit()
+
