@@ -638,13 +638,14 @@ if __name__ == "__main__":
 	##########
 	max_row = my_stack.nRow
 	max_col = my_stack.nCol
-	block_rows = size * 32
-	if block_rows > 128:
-		block_rows = 128
-	#block_cols = 256
-	block_cols = my_stack.nCol / size 
-	if block_cols > 128:
-		block_cols = 128
+	#block_rows = size * 64
+	block_rows = 256
+	#if block_rows > 256:
+	#	block_rows = 256
+	block_cols = 256
+	#block_cols = my_stack.nCol / size 
+	#if block_cols > 256:
+	#	block_cols = 256
 	#start_row = 0
 	#start_col = 0
 	#print "max_row %d" %max_row
@@ -672,10 +673,8 @@ if __name__ == "__main__":
 				endCol = max_col
 
 			if ( startCol < max_col ) & ( startRow < max_row ):
-				print "Goody"	
-				print "startCol is", startCol
-				print "Doing", block_cols, "number of columns"	
-				
+				print "Doing", block_rows, "and", block_cols, "columns"	
+				print "Start row is", startRow, "and start col is", startCol
 				print "########################################"
 				print "Rank " + str(rank) + " is Processing rows:" + str(startRow) + "-" + str(endRow) + " and columns:" + str(startCol) + "-" + str(endCol) + "..."
 				
