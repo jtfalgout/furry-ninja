@@ -17,6 +17,8 @@ from osgeo import gdalconst
 from mpi4py import MPI
 from mpi4py.MPI import ANY_SOURCE
 
+debug_mode = True
+
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
@@ -163,7 +165,8 @@ class Stack:
 	##########
 	# create connections to output images and bands
 	##########
-	def openOutputDatasets(self):
+
+	def openOutputDatasets(self, create=True):
 		start_time = time.time()
 		total_time = -1
 
@@ -176,37 +179,61 @@ class Stack:
 		self.output_datasets = np.empty((self.n_input_datasets), dtype=object)
 		self.output_bands = np.empty((self.n_input_datasets, len(self.output_band_names)), dtype=object)
 
-		# create the TIF driver for output data
-		driver = gdal.GetDriverByName("GTiff")
+		if create:
+			# create the TIF driver for output data
+			driver = gdal.GetDriverByName("GTiff")
 
-		# loop through the files and create output
-		for i in range(0, self.n_input_datasets):
-			output_image_name = self.output_dir + os.path.basename(self.stack['file_'][i])
+			# loop through the files and create output
+			for i in range(0, self.n_input_datasets):
+				# exclude first year of the stack
+				#if self.stack['year'][i] <> np.min(self.stack['year']):
+				if True:
+					output_image_name = self.output_dir + os.path.basename(self.stack['file_'][i])
+					
+					# create the files
+					self.output_datasets[i] = driver.Create( output_image_name, self.nCol, self.nRow, len(self.output_band_names), gdal.GDT_Int16)
 
-			# create the files
-			self.output_datasets[i] = driver.Create( output_image_name, self.nCol, self.nRow, len(self.output_band_names), gdal.GDT_Int16)
+					if self.output_datasets[i] is None:
+						return( [False, total_time, "Failed to create dataset " + output_image_name] )
+					else:
+						print 'Created ', self.output_datasets[i]
 
-			if self.output_datasets[i] is None:
-				return( [False, total_time, "Failed to create dataset " + output_image_name] )
-			else:
-				print 'Created ', self.output_datasets[i]
+					# add the projection and georeferenceing info
+					self.output_datasets[i].SetGeoTransform( self.geotrans )
+					self.output_datasets[i].SetProjection( self.prj )
 
-			# add the projection and georeferenceing info
-			self.output_datasets[i].SetGeoTransform( self.geotrans )
-			self.output_datasets[i].SetProjection( self.prj )
+					# add the bands and set no data values
+					for j in range(0, len(self.output_band_names)):
+						self.output_bands[i,j] = self.output_datasets[i].GetRasterBand(j+1)
 
-			# add the bands and set no data values
-			for j in range(0, len(self.output_band_names)):
-				self.output_bands[i,j] = self.output_datasets[i].GetRasterBand(j+1)
+						if self.output_bands[i,j] is None:
+							return( [False, total_time, "Failed to create band " + str(j) + " of dataset " + output_image_name] )
 
-				if self.output_bands[i,j] is None:
-					return( [False, total_time, "Failed to create band " + str(j) + " of dataset " + output_image_name] )
+						self.output_bands[i,j].SetNoDataValue(self.nodata)
+						
+		else:	# open existing
+			for i in range(0, self.n_input_datasets):
+				# exclude first year of the stack
+				# if self.stack['year'][i] <> np.min(self.stack['year']):
+				if True:
+					output_image_name = self.output_dir + os.path.basename(self.stack['file_'][i])
 
-				self.output_bands[i,j].SetNoDataValue(self.nodata)
+					# create the files
+					self.output_datasets[i] = gdal.Open( output_image_name, gdalconst.GA_Update )
+
+					if self.output_datasets[i] is None:
+						return( [False, total_time, "Failed to create dataset " + output_image_name] )
+					else:
+						print 'Opened ', self.output_datasets[i]			
+
+					for j in range(0, len(self.output_band_names)):
+						self.output_bands[i,j] = self.output_datasets[i].GetRasterBand(j+1)
+
+						if self.output_bands[i,j] is None:
+							return( [False, total_time, "Failed to create band " + str(j) + " of dataset " + output_image_name] )
 
 		total_time = time.time() - start_time
 		return( [True, total_time, "All bands created for " + str(self.n_input_datasets) + " output datasets"] )
-
 
 	##########
 	# close output datasets and generate histograms and pyramids
@@ -268,6 +295,9 @@ class Stack:
 		total_time = time.time() - start_time
 		return( [True, total_time, "Wrote " + str(block.endRow-block.startRow) + " rows of data, and " + str(block.endCol-block.startCol) + " columns of data" ] )
 
+	def checkOutputDatasets(self):
+		for i in range(0, self.n_input_datasets):
+			print i, self.output_bands[i,0]
 
 ##########
 # Class to hold a chunk of image data and process it
@@ -591,10 +621,10 @@ def processBlock(in_block):
 	status = in_block.calculateSpectralIndices()
 	#print status
 
-	status = in_block.calculateSeasonalSummaries()
+	#status = in_block.calculateSeasonalSummaries()
 	#print status
 
-	status = in_block.calculateBurnProbabilities()
+	#status = in_block.calculateBurnProbabilities()
 	#print status
 
 	status = in_block.classifyBurnProbabilities()
@@ -628,10 +658,15 @@ if __name__ == "__main__":
 	my_stack.openClassifier(my_shelf_file)
 
 	status = my_stack.openInputDatasets()
-	#print status
+	print status
 
-	status = my_stack.openOutputDatasets()
-	#print status
+	#if rank==0:
+	#	status = my_stack.openOutputDatasets(create=True)
+	#else:
+		#time.sleep(30)
+	status = my_stack.openOutputDatasets(create=False)
+
+	print status
 
 	##########
 	# loop through 'blocks' in the images
@@ -651,6 +686,8 @@ if __name__ == "__main__":
 	#print "max_row %d" %max_row
 	#print "max_col %d" %max_col
 
+	loop_counter = 0
+
 	#while ( start_row <= max_row ):
 	for start_row in range(0, max_row, block_rows):
 		startRow = comm.bcast(start_row, root=0)
@@ -662,13 +699,13 @@ if __name__ == "__main__":
 			#startCol = comm.scatter(x_axis, root=0)
 			startCol = comm.bcast(start_col, root=0)
 
-			endRow = startRow + block_rows - 1
+			endRow = startRow + block_rows #- 1
 			if endRow > max_row:
 				endRow = max_row
 
 			startCol = startCol + (block_cols * rank)
 				#startCol = max_col
-			endCol = startCol + block_cols - 1
+			endCol = startCol + block_cols #- 1
 			if endCol > max_col:
 				endCol = max_col
 
@@ -682,12 +719,16 @@ if __name__ == "__main__":
 				#print result[1:3]
 				in_block = result[0]
 
+				#my_stack.checkOutputDatasets()
+
 				##########
 				# Start multithreading
 				##########
 				result = processBlock(in_block)
 				#print result[1:3]
 				out_block = result[0]
+
+				#my_stack.checkOutputDatasets()
 			
 				##########
 				# stop multithreading here
@@ -695,15 +736,18 @@ if __name__ == "__main__":
 				status = my_stack.writeBlock(out_block)
 				#print status
 
+				loop_counter += 1
+
+
 
 
 	##########
 	# stop looping here
 	##########
-	status = my_stack.closeOutputData()
-	print status
+	if rank==0:
+		status = my_stack.closeOutputData()
+		print status
 
-	if rank == 0:
 		end_time0 = time.time()
 		print 'Done! Total processing time = ' + str((end_time0 - start_time0)/60) + ' minutes.'
 
