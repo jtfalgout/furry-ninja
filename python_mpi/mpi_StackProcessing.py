@@ -686,7 +686,6 @@ if __name__ == "__main__":
 	#print "max_row %d" %max_row
 	#print "max_col %d" %max_col
 
-	loop_counter = 0
 
 	#while ( start_row <= max_row ):
 	for start_row in range(0, max_row, block_rows):
@@ -736,7 +735,6 @@ if __name__ == "__main__":
 				status = my_stack.writeBlock(out_block)
 				#print status
 
-				loop_counter += 1
 
 
 
