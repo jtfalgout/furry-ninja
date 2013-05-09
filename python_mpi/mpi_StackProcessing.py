@@ -688,52 +688,57 @@ if __name__ == "__main__":
 
 
 	#while ( start_row <= max_row ):
-	for start_row in range(0, max_row, block_rows):
-		startRow = comm.bcast(start_row, root=0)
+	if rank == 0:
+		for startRow in range(0, max_row, block_rows):
+			#startRow = comm.bcast(start_row, root=0)
+	
+			#while ( start_col <= max_col ):
+			for startCol in range(0, max_col, block_cols ):
+				worker = 1
+				#end_col = start_col + (block_cols * size)
+				#x_axis = range(start_col, end_col, block_cols)
+				#startCol = comm.scatter(x_axis, root=0)
+				#startCol = comm.bcast(start_col, root=0)
 
-		#while ( start_col <= max_col ):
-		for start_col in range(0, max_col, (block_cols * size) ):
-			#end_col = start_col + (block_cols * size)
-			#x_axis = range(start_col, end_col, block_cols)
-			#startCol = comm.scatter(x_axis, root=0)
-			startCol = comm.bcast(start_col, root=0)
+				endRow = startRow + block_rows 
+				if endRow > max_row:
+					endRow = max_row
+				endCol = startCol + block_cols
+				if endCol > max_col:
+					endCol = max_col
+	
+				if ( startCol < max_col ) & ( startRow < max_row ):
+					result = my_stack.readBlock(startCol, endCol, startRow, endRow)
+					#print result[1:3]
+					work_block = result[0]
 
-			endRow = startRow + block_rows #- 1
-			if endRow > max_row:
-				endRow = max_row
+					#my_stack.checkOutputDatasets()
+	
+					##########
+					# Start multithreading
+					##########
+				#if rank == 0:
+					print "Sending", block_rows, "rows and", block_cols, "columns to rank", worker	
+					print "Start row is", startRow, "and start col is", startCol
+					print "########################################"
+					print "Rank " + str(worker) + " is Processing rows:" + str(startRow) + "-" + str(endRow) + " and columns:" + str(startCol) + "-" + str(endCol) + "..."
+					comm.isend(work_block, dest=worker, tag=worker)
+				worker = worker + 1
+	
+	else: 
+		in_block = comm.recv(source=0, tag=rank)
+		result = processBlock(in_block)
+		print "Rank", rank, ":", result[1:3]
+		out_block = result[0]
+		status = my_stack.writeBlock(out_block)
+	
+		#my_stack.checkOutputDatasets()
 
-			startCol = startCol + (block_cols * rank)
-				#startCol = max_col
-			endCol = startCol + block_cols #- 1
-			if endCol > max_col:
-				endCol = max_col
-
-			if ( startCol < max_col ) & ( startRow < max_row ):
-				print "Doing", block_rows, "and", block_cols, "columns"	
-				print "Start row is", startRow, "and start col is", startCol
-				print "########################################"
-				print "Rank " + str(rank) + " is Processing rows:" + str(startRow) + "-" + str(endRow) + " and columns:" + str(startCol) + "-" + str(endCol) + "..."
-				
-				result = my_stack.readBlock(startCol, endCol, startRow, endRow)
-				#print result[1:3]
-				in_block = result[0]
-
-				#my_stack.checkOutputDatasets()
-
-				##########
-				# Start multithreading
-				##########
-				result = processBlock(in_block)
-				#print result[1:3]
-				out_block = result[0]
-
-				#my_stack.checkOutputDatasets()
-			
-				##########
-				# stop multithreading here
-				##########
-				status = my_stack.writeBlock(out_block)
-				#print status
+		##########
+		# stop multithreading here
+		##########
+		#status = my_stack.writeBlock(out_block)
+		#print status
 
 
 
