@@ -685,52 +685,121 @@ if __name__ == "__main__":
 	#start_col = 0
 	#print "max_row %d" %max_row
 	#print "max_col %d" %max_col
+	num_blocks =  (max_row/block_rows)*(max_col/block_cols)
+	block_coords = [ ] 
 
 
 	#while ( start_row <= max_row ):
-	if rank == 0:
-		for startRow in range(0, max_row, block_rows):
-			#startRow = comm.bcast(start_row, root=0)
-	
-			#while ( start_col <= max_col ):
-			for startCol in range(0, max_col, block_cols ):
-				worker = 1
-				#end_col = start_col + (block_cols * size)
-				#x_axis = range(start_col, end_col, block_cols)
-				#startCol = comm.scatter(x_axis, root=0)
-				#startCol = comm.bcast(start_col, root=0)
+	if rank != 0:
+		for _ in range(num_blocks):
+			total_blocks = 0
 
-				endRow = startRow + block_rows 
-				if endRow > max_row:
-					endRow = max_row
-				endCol = startCol + block_cols
-				if endCol > max_col:
-					endCol = max_col
-	
-				if ( startCol < max_col ) & ( startRow < max_row ):
-					result = my_stack.readBlock(startCol, endCol, startRow, endRow)
-					#print result[1:3]
-					work_block = result[0]
+			for startRow in range(0, max_row, block_rows):
 
-					#my_stack.checkOutputDatasets()
+				for startCol in range(0, max_col, block_cols ):
+
+					endRow = startRow + block_rows 
+					if endRow > max_row:
+						endRow = max_row
+					endCol = startCol + block_cols
+					if endCol > max_col:
+						endCol = max_col
 	
-					##########
-					# Start multithreading
-					##########
-				#if rank == 0:
-					print "Sending", block_rows, "rows and", block_cols, "columns to rank", worker	
-					print "Start row is", startRow, "and start col is", startCol
-					print "########################################"
-					print "Rank " + str(worker) + " is Processing rows:" + str(startRow) + "-" + str(endRow) + " and columns:" + str(startCol) + "-" + str(endCol) + "..."
-					comm.send(work_block, dest=worker, tag=worker)
+					if ( startRow < max_row ) & ( endRow <= max_row ) & ( startCol < max_col ) & ( endCol <= max_col ):
+						block_coords.append([startRow, endRow, startCol, endCol])
+						total_blocks =  total_blocks + 1
+					else:
+						print "Coords dont make sense"
+						
+	
+						##########
+						# Start multithreading
+						##########
+	
+		
+	#if rank != 0:
+		for block_id in range(total_blocks, (size - 1)):
+			block_id = block_id + rank
+			print block_id, ":", block_coords[block_id]
+			print "block id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
+			#print "Sending", block_rows, "rows and", block_cols, "columns to rank", rank
+			print "Start row is", block_coords[block_id][0], "and start col is", block_coords[block_id][2]
+			print "########################################"
+			print "Rank ", rank, " is Processing block id", block_id, "with rows:", block_coords[block_id][0], "-", block_coords[block_id][1], " and columns:", block_coords[block_id][2], "-", block_coords[block_id][3], "..."
+			result = my_stack.readBlock(block_coords[block_id][2], block_coords[block_id][3], block_coords[block_id][0], block_coords[block_id][1])
+			print result[1:3]
+			#in_block = comm.recv(source=0, tag=1)
+			#rin_block = result[0]
+			#comm.send(rin_block, dest=1)
+			#rout_block = result[0]
+			#status = my_stack.writeBlock(out_block)
+			#print "Sent the rin_block"
+			#print "Waiting on the rout_block"
+			#out_block=comm.recv(source=1)
+			#print "Got rout_block and writing out_block"
+			#status = my_stack.writeBlock(out_block)
+			#print "Rank 0:", status
+			in_block = result[0]
+			result = processBlock(in_block)
+			print "Rank", rank, ":", result[1:3]
+			rout_block = result[0]
+			print rout_block
+			comm.send(rout_block, dest=0)
+			print "Sent rout_block"
+
+	else:
+		while True:
+			#in_block = comm.recv( source=0 )
+			#print "in_block:", in_block
+			#result = processBlock(in_block)
+			#print "Rank", rank, ":", result[1:3]
+			#rout_block = result[0]
+			#print "rout_block:", rout_block
+			#comm.send(rout_block, dest=0)
+			#print "Sent the rout_block"
+			print "Waiting on rout_block"
+			out_block=comm.recv(source=MPI.ANY_SOURCE)
+			print "Got rout_block and writing out_block"
+			status = my_stack.writeBlock(out_block)
+			print "Rank 0:", status
+			
+
+'''
+	if rank != 0:
+		for block_id in range(total_blocks):
+			print "block id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
+			print "Sending", block_rows, "rows and", block_cols, "columns to rank", rank
+			print "Start row is", block_coords[block_id][0], "and start col is", block_coords[block_id][2]
+			print "########################################"
+			print "Rank ", rank, " is Processing rows:", block_coords[block_id][0], "-", block_coords[block_id][1], " and columns:", block_coords[block_id][2], "-", block_coords[block_id][3], "..."
+			result = my_stack.readBlock(block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3])
+			print result[1:3]
+			#in_block = comm.recv(source=0, tag=1)
+			in_block = result[0]
+			result = processBlock(in_block)
+			print "Rank", rank, ":", result[1:3]
+			rout_block = result[0]
+			#status = my_stack.writeBlock(out_block)
+			comm.isend(rout_block, dest=0)
+			print "Sent the rout_block"
 	
 	else: 
-		in_block = comm.recv(source=0, tag=rank)
-		result = processBlock(in_block)
-		print "Rank", rank, ":", result[1:3]
-		out_block = result[0]
-		#status = my_stack.writeBlock(out_block)
-		comm.send(out_block, dest=0, tag=rank)
+		#worker = 1
+		#for block_id in range(total_blocks):
+		#	print "block id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
+		#	print "Sending", block_rows, "rows and", block_cols, "columns to rank" worker
+		#	print "Start row is", block_coords[block_id][0], "and start col is", block_coords[block_id][2]
+		#	print "########################################"
+		#	print "Rank ", worker, " is Processing rows:", block_coords[block_id][0], "-", block_coords[block_id][1], " and columns:", block_coords[block_id][2], "-", block_coords[block_id][3], "..."
+		#	result = my_stack.readBlock(block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3])
+		#	print result[1:3]
+			#work_block = result[0]
+			#comm.send( work_block, dest=worker, tag=1 )
+			out_block=comm.recv( source=1 )
+			status = my_stack.writeBlock(out_block)
+			print "Writing File from Rank 0"
+			print status
+'''
 	
 		#my_stack.checkOutputDatasets()
 
@@ -740,22 +809,22 @@ if __name__ == "__main__":
 		#status = my_stack.writeBlock(out_block)
 		#print status
 
-	if rank == 0:
-		out_block=comm.recieve(source=any)
-		status = my_stack.writeBlock(out_block)
-		print status
+	#if rank == 0:
+	#	out_block=comm.recv(source=any)
+	#	status = my_stack.writeBlock(out_block)
+	#	print status
 
 
 
 	##########
 	# stop looping here
 	##########
-	if rank==0:
-		status = my_stack.closeOutputData()
-		print status
+if rank==0:
+	status = my_stack.closeOutputData()
+	print status
 
-		end_time0 = time.time()
-		print 'Done! Total processing time = ' + str((end_time0 - start_time0)/60) + ' minutes.'
+	end_time0 = time.time()
+	print 'Done! Total processing time = ' + str((end_time0 - start_time0)/60) + ' minutes.'
 
-	sys.exit()
+sys.exit()
 
