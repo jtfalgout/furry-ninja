@@ -722,15 +722,15 @@ if __name__ == "__main__":
 					print "Start row is", startRow, "and start col is", startCol
 					print "########################################"
 					print "Rank " + str(worker) + " is Processing rows:" + str(startRow) + "-" + str(endRow) + " and columns:" + str(startCol) + "-" + str(endCol) + "..."
-					comm.isend(work_block, dest=worker, tag=worker)
-				worker = worker + 1
+					comm.send(work_block, dest=worker, tag=worker)
 	
 	else: 
 		in_block = comm.recv(source=0, tag=rank)
 		result = processBlock(in_block)
 		print "Rank", rank, ":", result[1:3]
 		out_block = result[0]
-		status = my_stack.writeBlock(out_block)
+		#status = my_stack.writeBlock(out_block)
+		comm.send(out_block, dest=0, tag=rank)
 	
 		#my_stack.checkOutputDatasets()
 
@@ -740,7 +740,10 @@ if __name__ == "__main__":
 		#status = my_stack.writeBlock(out_block)
 		#print status
 
-
+	if rank == 0:
+		out_block=comm.recieve(source=any)
+		status = my_stack.writeBlock(out_block)
+		print status
 
 
 
