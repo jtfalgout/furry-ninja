@@ -621,10 +621,10 @@ def processBlock(in_block):
 	status = in_block.calculateSpectralIndices()
 	#print status
 
-	#status = in_block.calculateSeasonalSummaries()
+	status = in_block.calculateSeasonalSummaries()
 	#print status
 
-	#status = in_block.calculateBurnProbabilities()
+	status = in_block.calculateBurnProbabilities()
 	#print status
 
 	status = in_block.classifyBurnProbabilities()
@@ -716,52 +716,39 @@ if __name__ == "__main__":
 						# Start multithreading
 						##########
 	
-		
+		print "Generated block_coords array with %d total blocks" %total_blocks	
+		time.sleep(2)
 	#if rank != 0:
-		for block_id in range(total_blocks, (size - 1)):
+		for block_id in range(0, total_blocks, (size - 1)):
 			block_id = block_id + rank
-			print block_id, ":", block_coords[block_id]
-			print "block id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
+			#print block_id, ":", block_coords[block_id]
+			#print "block id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
 			#print "Sending", block_rows, "rows and", block_cols, "columns to rank", rank
-			print "Start row is", block_coords[block_id][0], "and start col is", block_coords[block_id][2]
+			#print "Start row is", block_coords[block_id][0], "and start col is", block_coords[block_id][2]
 			print "########################################"
 			print "Rank ", rank, " is Processing block id", block_id, "with rows:", block_coords[block_id][0], "-", block_coords[block_id][1], " and columns:", block_coords[block_id][2], "-", block_coords[block_id][3], "..."
 			result = my_stack.readBlock(block_coords[block_id][2], block_coords[block_id][3], block_coords[block_id][0], block_coords[block_id][1])
-			print result[1:3]
-			#in_block = comm.recv(source=0, tag=1)
-			#rin_block = result[0]
-			#comm.send(rin_block, dest=1)
-			#rout_block = result[0]
-			#status = my_stack.writeBlock(out_block)
-			#print "Sent the rin_block"
-			#print "Waiting on the rout_block"
-			#out_block=comm.recv(source=1)
-			#print "Got rout_block and writing out_block"
-			#status = my_stack.writeBlock(out_block)
-			#print "Rank 0:", status
+			#print result[1:3]
 			in_block = result[0]
 			result = processBlock(in_block)
-			print "Rank", rank, ":", result[1:3]
+			#print "Rank", rank, ":", result[1:3]
 			rout_block = result[0]
-			print rout_block
+			#print rout_block
 			comm.send(rout_block, dest=0)
-			print "Sent rout_block"
+			if block_id == total_blocks:
+				print "Finished processing %d total blocks" %total_blocks
+				comm.send("FINISHED", dest=0)
+			#print "Sent rout_block"
 
 	else:
 		while True:
-			#in_block = comm.recv( source=0 )
-			#print "in_block:", in_block
-			#result = processBlock(in_block)
-			#print "Rank", rank, ":", result[1:3]
-			#rout_block = result[0]
-			#print "rout_block:", rout_block
-			#comm.send(rout_block, dest=0)
-			#print "Sent the rout_block"
-			print "Waiting on rout_block"
+			#print "Waiting on rout_block"
 			out_block=comm.recv(source=MPI.ANY_SOURCE)
-			print "Got rout_block and writing out_block"
+			if out_block == "FINISHED":
+				break
+			#print "Got rout_block and writing out_block"
 			status = my_stack.writeBlock(out_block)
-			print "Rank 0:", status
+			#print "Rank 0:", status
 			
 
 '''
