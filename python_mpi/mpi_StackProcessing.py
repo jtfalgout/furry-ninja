@@ -166,7 +166,8 @@ class Stack:
 	# create connections to output images and bands
 	##########
 
-	def openOutputDatasets(self, create=True):
+	#def openOutputDatasets(self, create=True):
+	def openOutputDatasets(self, create=False):
 		start_time = time.time()
 		total_time = -1
 
@@ -648,7 +649,7 @@ if __name__ == "__main__":
 	my_stack_file = my_root_dir + "test_tif_stack.csv"	# small stack to test with
 	my_input_dir = my_root_dir + "tif/"
 	#my_output_dir = my_root_dir + "test/"
-	my_output_dir =  "/work/671/test/"
+	my_output_dir =  "/work/675/test/"
 
 	# create the stack object and set values
 	my_stack = Stack(my_stack_file)
@@ -684,7 +685,7 @@ if __name__ == "__main__":
 	block_coords = [ ] 
 
 
-	#while ( start_row <= max_row ):
+	#Generate a list of lists that contains stack block coordinates to send to all workers
 	if rank == 0:
 		for _ in range(num_blocks):
 			total_blocks = 0
@@ -709,9 +710,7 @@ if __name__ == "__main__":
 
 
 		print "Generated block_coords array with %d total blocks" %total_blocks	
-	#time.sleep(2)
 
-	#if rank == 0:
 		rank_blocks = total_blocks/( size - 1 )
 		assigned_blocks = []
 		for x in range(0, total_blocks, rank_blocks):
@@ -723,8 +722,6 @@ if __name__ == "__main__":
 				ylist.append(y)
 			assigned_blocks.append(ylist)
 				
-		#for i in range(len(assigned_blocks)):
-		#	print assigned_blocks[i]
 	else:
 		assigned_blocks = None
 		block_coords = None
@@ -737,67 +734,48 @@ if __name__ == "__main__":
 
 
 	if rank != 0:
-		#print "Rank", rank, "is assigned the following block ids", assigned_blocks[rank-1]
-		#time.sleep(10)
-		#for block_id in range(0, total_blocks, (size - 1)):
 		for block_index in range(len(assigned_blocks[rank - 1])): 
 			block_id = assigned_blocks[rank-1][block_index]
 			#print "block id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
-			#print "Sending", block_rows, "rows and", block_cols, "columns to rank", rank
-			#print "Start row is", block_coords[block_id][0], "and start col is", block_coords[block_id][2]
 			print "########################################"
 			print "Rank ", rank, " is Processing block id", block_id, "with rows:", block_coords[block_id][0], "-", block_coords[block_id][1], " and columns:", block_coords[block_id][2], "-", block_coords[block_id][3], "..."
 			result = my_stack.readBlock(block_coords[block_id][2], block_coords[block_id][3], block_coords[block_id][0], block_coords[block_id][1])
 			#print result[1:3]
 			in_block = result[0]
 			result = processBlock(in_block)
-			#print "Rank", rank, ":", result[1:3]
 			rout_block = result[0]
-			#print rout_block
-			comm.send(rout_block, dest=0)
-			#if block_id == total_blocks - 1:
-			#	print "Finished processing %d total blocks" %total_blocks
-			#	time.sleep(30)
-			#	comm.send("FINISHED", dest=0)
-			#print "Sent rout_block"
+			comm.send(rout_block, tag=1, dest=0)
+		# Tell the root we're done with our work
+		comm.send(rank, tag=9, dest=0)
 
 	else:
+		# Rank 0 will receive all of the processed blocks and write them to disk
+		fin_rank = [ ]
 		out_blocks_recv = 1
-		while out_blocks_recv < total_blocks:
-			#print "Waiting on rout_block"
-			out_block=comm.recv(source=MPI.ANY_SOURCE)
-			#if out_block == "FINISHED":
-			#	print "Freak Out"
-			#	break
-			#print "Got rout_block and writing out_block"
-			status = my_stack.writeBlock(out_block)
-			#print "Rank 0:", status
-			print total_blocks - out_blocks_recv, "blocks left to process out of", total_blocks
-			out_blocks_recv = out_blocks_recv + 1
+		workerRank = None
+		while True:
+			#Test for the tag on the incoming messages.
+			# Tag=1 is a processed block, tag=9 is an "all done" message
+			if comm.Iprobe(source=MPI.ANY_SOURCE, tag=1):
+				out_block=comm.recv(source=MPI.ANY_SOURCE, tag=1)
+				#print "Got rout_block and writing out_block"
+				status = my_stack.writeBlock(out_block)
+				#print "Rank 0:", status
+				print total_blocks - out_blocks_recv, "blocks left to process out of", total_blocks
+				out_blocks_recv = out_blocks_recv + 1
+			elif comm.Iprobe(source=MPI.ANY_SOURCE, tag=9):
+				fin_rank.append(comm.recv(workerRank, source=MPI.ANY_SOURCE, tag=9))
+				print "Received a finished message from rank", fin_rank[-1]
+				if len(fin_rank) == (size - 1):
+					print "All ranks completed processing"
+					break
 
 	
-		#my_stack.checkOutputDatasets()
-
-		##########
-		# stop multithreading here
-		##########
-		#status = my_stack.writeBlock(out_block)
-		#print status
-
-	#if rank == 0:
-	#	out_block=comm.recv(source=any)
-	#	status = my_stack.writeBlock(out_block)
-	#	print status
-
-
-
-	##########
-	# stop looping here
-	##########
 
 # Wait for everyone
 comm.barrier()
 
+# Celebrate - we're done. Close the output data
 if rank==0:
 	status = my_stack.closeOutputData()
 	print status
