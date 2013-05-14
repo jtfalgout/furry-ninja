@@ -647,7 +647,8 @@ if __name__ == "__main__":
 	my_root_dir = "/data/landsat/FireECV/p" + my_path + "r" + my_row + "/"
 	my_stack_file = my_root_dir + "test_tif_stack.csv"	# small stack to test with
 	my_input_dir = my_root_dir + "tif/"
-	my_output_dir = my_root_dir + "test/"
+	#my_output_dir = my_root_dir + "test/"
+	my_output_dir =  "/work/671/test/"
 
 	# create the stack object and set values
 	my_stack = Stack(my_stack_file)
@@ -660,31 +661,25 @@ if __name__ == "__main__":
 	status = my_stack.openInputDatasets()
 	print status
 
-	#if rank==0:
-	#	status = my_stack.openOutputDatasets(create=True)
-	#else:
-		#time.sleep(30)
-	status = my_stack.openOutputDatasets(create=False)
+	if rank==0:
+		status = my_stack.openOutputDatasets(create=True)
+		print status
+	else:
+		#time.sleep(10)
+		status = my_stack.openOutputDatasets(create=False)
 
-	print status
+	# Let everyone catch up
+	comm.barrier()
+	if rank == 0: print "Off We Go"
+	#print status
 
 	##########
 	# loop through 'blocks' in the images
 	##########
 	max_row = my_stack.nRow
 	max_col = my_stack.nCol
-	#block_rows = size * 64
 	block_rows = 256
-	#if block_rows > 256:
-	#	block_rows = 256
 	block_cols = 256
-	#block_cols = my_stack.nCol / size 
-	#if block_cols > 256:
-	#	block_cols = 256
-	#start_row = 0
-	#start_col = 0
-	#print "max_row %d" %max_row
-	#print "max_col %d" %max_col
 	num_blocks =  (max_row/block_rows)*(max_col/block_cols)
 	block_coords = [ ] 
 
@@ -734,6 +729,8 @@ if __name__ == "__main__":
 		assigned_blocks = None
 		block_coords = None
 		total_blocks = None
+
+	# Broadcast to all ranks
 	assigned_blocks = comm.bcast(assigned_blocks, root=0)
 	block_coords = comm.bcast(block_coords, root=0)
 	total_blocks = comm.bcast(total_blocks, root=0)
@@ -758,22 +755,25 @@ if __name__ == "__main__":
 			rout_block = result[0]
 			#print rout_block
 			comm.send(rout_block, dest=0)
-			if block_id == total_blocks - 1:
-				print "Finished processing %d total blocks" %total_blocks
-				comm.send("FINISHED", dest=0)
+			#if block_id == total_blocks - 1:
+			#	print "Finished processing %d total blocks" %total_blocks
+			#	time.sleep(30)
+			#	comm.send("FINISHED", dest=0)
 			#print "Sent rout_block"
 
 	else:
-		while True:
+		out_blocks_recv = 1
+		while out_blocks_recv < total_blocks:
 			#print "Waiting on rout_block"
 			out_block=comm.recv(source=MPI.ANY_SOURCE)
-			if out_block == "FINISHED":
-				"Freak Out"
-				break
+			#if out_block == "FINISHED":
+			#	print "Freak Out"
+			#	break
 			#print "Got rout_block and writing out_block"
 			status = my_stack.writeBlock(out_block)
 			#print "Rank 0:", status
-			
+			print total_blocks - out_blocks_recv, "blocks left to process out of", total_blocks
+			out_blocks_recv = out_blocks_recv + 1
 
 	
 		#my_stack.checkOutputDatasets()
@@ -794,6 +794,10 @@ if __name__ == "__main__":
 	##########
 	# stop looping here
 	##########
+
+# Wait for everyone
+comm.barrier()
+
 if rank==0:
 	status = my_stack.closeOutputData()
 	print status
