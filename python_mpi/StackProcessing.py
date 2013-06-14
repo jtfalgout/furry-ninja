@@ -14,11 +14,6 @@ from osgeo import osr
 from osgeo import gdal_array
 from osgeo import gdalconst
 
-from mpi4py import MPI
-
-comm = MPI.COMM_WORLD
-mode = MPI.MODE_CREATE | MPI.MODE_WRONLY
-
 class Stack:
 	##########
 	# INPUTS

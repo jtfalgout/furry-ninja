@@ -2,6 +2,8 @@ import sys
 import os
 import time
 import shelve
+import cProfile
+import socket
 
 import numpy as np
 np.seterr(divide='ignore')
@@ -105,6 +107,10 @@ class Stack:
 		self.clf_shelf_file = shelf_file
 		my_shelf = shelve.open(shelf_file)
 		self.clf = my_shelf['clf']
+		
+		if self.clf == None:
+			print 'Did not get clf object!'
+
 		my_shelf.close()
 
 		total_time = time.time() - start_time
@@ -461,7 +467,7 @@ class StackBlock:
 		total_time = -1
 
 		# predictor names - predictors must be in the same order as they were when the boosted regression tree model was trained
-		predictor_band_names = ["month","band1","band2","band3","band4","band5","band7","ndvi","ndmi","nbr","nbr2","wi_b3","wi_b4","wi_b5","wi_b7","wi_ndvi","wi_ndmi","wi_nbr","wi_nbr2","sp_b3","sp_b4","sp_b5","sp_b7","sp_ndvi","sp_ndmi","sp_nbr","sp_nbr2","su_b3","su_b4","su_b5","su_b7","su_ndvi","su_ndmi","su_nbr","su_nbr2","fa_b3","fa_b4","fa_b5","fa_b7","fa_ndvi","fa_ndmi","fa_nbr","fa_nbr2","ly_wi_b3","ly_wi_b4","ly_wi_b5","ly_wi_b7","ly_wi_ndvi","ly_wi_ndmi","ly_wi_nbr","ly_wi_nbr2","ly_sp_b3","ly_sp_b4","ly_sp_b5","ly_sp_b7","ly_sp_ndvi","ly_sp_ndmi","ly_sp_nbr","ly_sp_nbr2","ly_su_b3","ly_su_b4","ly_su_b5","ly_su_b7","ly_su_ndvi","ly_su_ndmi","ly_su_nbr","ly_su_nbr2","ly_fa_b3","ly_fa_b4","ly_fa_b5","ly_fa_b7","ly_fa_ndvi","ly_fa_ndmi","ly_fa_nbr","ly_fa_nbr2"]
+		predictor_band_names = ["sensor", "month","band1","band2","band3","band4","band5","band7","ndvi","ndmi","nbr","nbr2","wi_b3","wi_b4","wi_b5","wi_b7","wi_ndvi","wi_ndmi","wi_nbr","wi_nbr2","sp_b3","sp_b4","sp_b5","sp_b7","sp_ndvi","sp_ndmi","sp_nbr","sp_nbr2","su_b3","su_b4","su_b5","su_b7","su_ndvi","su_ndmi","su_nbr","su_nbr2","fa_b3","fa_b4","fa_b5","fa_b7","fa_ndvi","fa_ndmi","fa_nbr","fa_nbr2","ly_wi_b3","ly_wi_b4","ly_wi_b5","ly_wi_b7","ly_wi_ndvi","ly_wi_ndmi","ly_wi_nbr","ly_wi_nbr2","ly_sp_b3","ly_sp_b4","ly_sp_b5","ly_sp_b7","ly_sp_ndvi","ly_sp_ndmi","ly_sp_nbr","ly_sp_nbr2","ly_su_b3","ly_su_b4","ly_su_b5","ly_su_b7","ly_su_ndvi","ly_su_ndmi","ly_su_nbr","ly_su_nbr2","ly_fa_b3","ly_fa_b4","ly_fa_b5","ly_fa_b7","ly_fa_ndvi","ly_fa_ndmi","ly_fa_nbr","ly_fa_nbr2"]
 		#predictor_band_names = ["month","band1","band2","band3","band4","band5","band7","ndvi","ndmi","nbr","nbr2"]		
 		
 		# allocate space for a row of predictors
@@ -578,14 +584,14 @@ class StackBlock:
 
 					# make predictions
 					# COMMENTED OUT FOR CLUSTER MPI TESTSING
-					# pfire = (1000.0 * self.clf.predict_proba(predictors)[:,1]).astype(int)
+					pfire = (1000.0 * self.clf.predict_proba(predictors)[:,1]).astype(int)
 
 					# update output array
 					self.bp_data[j,0,i,:] = self.image_data[j, self.image_band_names.index('QA'),i,:]
-					self.bp_data[j,1,i,:] = self.image_data[j, self.image_band_names.index('band3'),i,:]	# UNCOMMENTED FOR CLUSTER/MPI TESTING
+					#self.bp_data[j,1,i,:] = self.image_data[j, self.image_band_names.index('band3'),i,:]	# UNCOMMENTED FOR CLUSTER/MPI TESTING
 
 					# COOMMENTED OUT FOR CLUSTER MPI TESTING
-					# self.bp_data[j,1,i,:] = pfire
+					self.bp_data[j,1,i,:] = pfire
 
 		total_time = time.time() - start_time
 		return( [True, total_time, 'Calculated burn probabilities summaries for ' + str(self.si_data.shape[0]) + ' files, and ' + str(self.nCol) + ' columns x ' + str(self.nRow) + ' rows of data'] )
@@ -646,31 +652,39 @@ if __name__ == "__main__":
 	my_path = "025"
 	my_row = "034"
 	my_root_dir = "/data/landsat/FireECV/p" + my_path + "r" + my_row + "/"
+
+	# command arg 1
 	my_stack_file = my_root_dir + "test_tif_stack.csv"	# small stack to test with
+
+	# command arg 2
 	my_input_dir = my_root_dir + "tif/"
+
+	# command arg 3
 	#my_output_dir = my_root_dir + "test/"
-	my_output_dir =  "/work/675/test/"
+	my_output_dir =  "/work/702/test/"
 
 	# create the stack object and set values
 	my_stack = Stack(my_stack_file)
 	my_stack.input_dir = my_input_dir
 	my_stack.output_dir = my_output_dir
 
-	my_shelf_file = "/data/landsat/FireECV/RegionalModels/EasternTemperateForests.shelf"
+	# command arg 4
+	my_shelf_file = "/data/landsat/FireECV/furry-ninja/python_mpi/East.shelf"
 	my_stack.openClassifier(my_shelf_file)
 
 	status = my_stack.openInputDatasets()
 	print status
 
 	if rank==0:
+		print "Opening Output Datasets"
 		status = my_stack.openOutputDatasets(create=True)
 		print status
-	else:
-		#time.sleep(10)
-		status = my_stack.openOutputDatasets(create=False)
+	#else:
+	#	#time.sleep(10)
+	#	status = my_stack.openOutputDatasets(create=False)
 
 	# Let everyone catch up
-	comm.barrier()
+	#comm.barrier()
 	if rank == 0: print "Off We Go"
 	#print status
 
@@ -679,6 +693,8 @@ if __name__ == "__main__":
 	##########
 	max_row = my_stack.nRow
 	max_col = my_stack.nCol
+
+	# command arg 5 + 6
 	block_rows = 256
 	block_cols = 256
 	num_blocks =  (max_row/block_rows)*(max_col/block_cols)
@@ -711,7 +727,14 @@ if __name__ == "__main__":
 
 		print "Generated block_coords array with %d total blocks" %total_blocks	
 
-		rank_blocks = total_blocks/( size - 1 )
+		if total_blocks >= ( size - 1 ):
+			rank_blocks = total_blocks/( size - 1 )
+		else :
+			print "Too many cpus assigned - reduce block size or reduce MPI world size"
+			print "Only need a max of %s total MPI ranks" %(total_blocks + 1)
+			raise RuntimeError('Ranks assigned exceeds number of image blocks to process')
+			comm.Abort()
+
 		assigned_blocks = []
 		for x in range(0, total_blocks, rank_blocks):
 			max_x = x + rank_blocks
@@ -732,6 +755,8 @@ if __name__ == "__main__":
 	block_coords = comm.bcast(block_coords, root=0)
 	total_blocks = comm.bcast(total_blocks, root=0)
 
+	# Wait for everyone to get the info
+	comm.barrier()
 
 	if rank != 0:
 		for block_index in range(len(assigned_blocks[rank - 1])): 
@@ -777,6 +802,8 @@ comm.barrier()
 
 # Celebrate - we're done. Close the output data
 if rank==0:
+	zerohost = socket.gethostname()
+	print "Rank 0 was on ", zerohost
 	status = my_stack.closeOutputData()
 	print status
 
