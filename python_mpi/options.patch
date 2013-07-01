@@ -1,0 +1,289 @@
+--- mpi_StackProcessing.py	2013-07-01 14:41:49.311406218 -0600
++++ mpiNewStackProcessing.py	2013-07-01 11:04:08.755718313 -0600
+@@ -4,6 +4,7 @@
+ import shelve
+ import cProfile
+ import socket
++import argparse
+ 
+ import numpy as np
+ np.seterr(divide='ignore')
+@@ -25,6 +26,13 @@
+ size = comm.Get_size()
+ rank = comm.Get_rank()
+ 
++parser = argparser.ArgumentParser()
++parser.add_argument("pathNum", help="Number of path")
++parser.add_argument("--myPath", help="Path number input from command line args", action="store_true")
++parser.add_argument("outDirName", help="Name of file")
++parser.add_argument("--myOutputDir", help="File input from command line args", action="store_true")
++args = parser.parse_args()
++
+ class Stack:
+ 	##########
+ 	# INPUTS
+@@ -641,6 +649,67 @@
+ 	total_time = time.time() - start_time
+ 	return( [in_block, total_time, 'Completed block processing for ' + str(in_block.si_data.shape[0]) + ' files, and rows:' + str(in_block.startRow) + '-' + str(in_block.endRow) + ' and cols:' + str(in_block.startCol) + '-' + str(in_block.endCol)] )
+ 	
++##########
++# Generate a list of lists that contains stack block coordinates to send to all workers
++##########
++def createStackBlocks(blockCount, highRow, numBlockRows, highCol, numBlockCols):
++	for _ in range(blockCount):
++		total_blocks = 0
++		block_coords = [ ]
++
++		for startRow in range(0, highRow, numBlockRows):
++
++			for startCol in range(0, highCol, numBlockCols):
++
++				endRow = startRow + numBlockRows
++				if endRow > highRow:
++					endRow = highRow
++				endCol = startCol + numBlockCols
++				if endCol >highCol:
++					endCol = highCol
++
++				if (startRow < highRow) and (endRow <= highRow) and (startCol < highCol) and (endCol <= highCol):
++					block_coords.append([startRow, endRow, startCol, endCol])
++					total_blocks = total_blocks + 1
++				else:
++					print "Coords dont make sense"
++	
++	print "Generated block_coords array with %d total blocks" %total_blocks
++
++	return total_blocks, block_coords
++
++##########
++# Workers processes blocks and return routeBlock
++##########
++def createRouteBlocks(assignedBlocks, blockCoordinate):
++	block_id = assignedBlocks[rank-1][block_index]
++	#print "block_id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
++	print "########################################"
++	print "Rank ", rank, " is Processing block id", block_id, "with rows:", blockCoordinate[block_id][0], "-", blockCoordinate[block_id][1], " and columns:", blockCoordinate[block_id][2], "-", blockCoordinate[block_id][3], "..."
++	result = my_stack.readBlock(blockCoordinate[block_id][2], blockCoordinate[block_id][3], blockCoordinate[block_id][0], blockCoordinate[block_id][1]) 
++	#print result[1:3]
++	in_block = result[0]
++	result = processBlock(in_block)
++	rout_block = result[0]
++
++	return rout_block
++
++##########
++# Creates block assignments using total blocks and rank
++##########
++def createBlockAssignments(totalBlocks, blockRank):
++	assignedBlocks = [ ]
++
++	for x in range(0, totalBlocks, blockRank):
++		max_x = x + blockRank
++		ylist = [ ]
++		if max_x > totalBlocks:
++			max_x = totalBlocks
++		for y in range(x, max_x):
++			ylist.append(y)
++		assignedBlocks.aapend(ylist)
++
++	return assignedBlocks
+ 
+ ##########
+ # test
+@@ -649,28 +718,51 @@
+ 	start_time0 = time.time()
+ 	
+ 	# some initial settings
+-	my_path = "025"
+-	my_row = "034"
+-	my_root_dir = "/data/landsat/FireECV/p" + my_path + "r" + my_row + "/"
+-
++	# my_path = "025"
++	# my_row = "034"
++	# my_root_dir = "/data/landsat/FireECV/p" + my_path + "r" + my_row + "/"
++	
+ 	# command arg 1
+-	my_stack_file = my_root_dir + "test_tif_stack.csv"	# small stack to test with
++	if args.myPath:
++		my_path = args.pathNum
++	else: 
++		print "Invalid path number"
+ 
+ 	# command arg 2
+-	my_input_dir = my_root_dir + "tif/"
++	if args.myRow:
++		my_row = args.rowNum
++	else:
++		print "Invalid row number"
+ 
+ 	# command arg 3
+-	#my_output_dir = my_root_dir + "test/"
+-	#my_output_dir =  "/work/702/test/"
+-	my_output_dir =  sys.argv[1] + "/test/"
++	if args.myRootDir:
++		my_root_dir = args.rootDirName + my_path + "r" + my_row + "/"
++	else:
++		print "Invalid root directory"
++
++	my_stack_file = my_root_dir + "test_tif_stack.csv" 	# small stack to test with
++
++	my_input_dir = my_root_dir + "tif/"
++
++	# command arg 4
++	if args.myOutputDir:
++		# /work/Job number/test/
++		my_output_dir =  args.outDirName
++	else:
++		print "Invalid output directory"
+ 
+ 	# create the stack object and set values
+ 	my_stack = Stack(my_stack_file)
+ 	my_stack.input_dir = my_input_dir
+ 	my_stack.output_dir = my_output_dir
+ 
+-	# command arg 4
+-	my_shelf_file = "/data/landsat/FireECV/furry-ninja/python_mpi/East.shelf"
++	# command arg 5
++	# my_shelf_file = "/data/landsat/FireECV/furry-ninja/python_mpi/East.shelf"
++	if args.myShelfFile:
++		my_shelf_file = args.shelfFileName
++	else:
++		print "Invalid shelf file"
++
+ 	my_stack.openClassifier(my_shelf_file)
+ 
+ 	status = my_stack.openInputDatasets()
+@@ -685,7 +777,7 @@
+ 	#	status = my_stack.openOutputDatasets(create=False)
+ 
+ 	# Let everyone catch up
+-	#comm.barrier()
++	comm.barrier()
+ 	if rank == 0: print "Off We Go"
+ 	#print status
+ 
+@@ -695,82 +787,58 @@
+ 	max_row = my_stack.nRow
+ 	max_col = my_stack.nCol
+ 
+-	# command arg 5 + 6
+-	block_rows = 256
+-	block_cols = 256
+-	num_blocks =  (max_row/block_rows)*(max_col/block_cols)
+-	block_coords = [ ] 
+-
+-
+-	#Generate a list of lists that contains stack block coordinates to send to all workers
+-	if rank == 0:
+-		for _ in range(num_blocks):
+-			total_blocks = 0
+-
+-			for startRow in range(0, max_row, block_rows):
+-	
+-				for startCol in range(0, max_col, block_cols ):
+-	
+-					endRow = startRow + block_rows 
+-					if endRow > max_row:
+-						endRow = max_row
+-					endCol = startCol + block_cols
+-					if endCol > max_col:
+-						endCol = max_col
++	# command arg 6 
++	if args.blockRows:
++		block_rows = args.bRows
++	else:
++		print "Invalid block rows"
+ 	
+-					if ( startRow < max_row ) & ( endRow <= max_row ) & ( startCol < max_col ) & ( endCol <= max_col ):
+-						block_coords.append([startRow, endRow, startCol, endCol])
+-						total_blocks =  total_blocks + 1
+-					else:
+-						print "Coords dont make sense"
+-						
++	# command arg 7
++	if args.blockCols:
++		block_cols = args.bCols
++	else:
++		print "Invalid block cols"
+ 
++	#block_rows = 256
++	#block_cols = 256
++	num_blocks =  (max_row/block_rows)*(max_col/block_cols)
++	blockLocation = [ ]
++	blockAssignment = [ ] 
+ 
+-		print "Generated block_coords array with %d total blocks" %total_blocks	
++	# Rank is 0
++	if rank == 0:
++		
++		# Generate lists using generatedStackBlock function
++		totalNumBlocks, blockLocation = createStackBlocks(num_blocks, max_row, block_rows, max_col, block_cols)
+ 
+-		if total_blocks >= ( size - 1 ):
+-			rank_blocks = total_blocks/( size - 1 )
++		if totalNumBlocks >= ( size - 1 ):
++			rankBlocks = totalNumBlocks/( size - 1 )
+ 		else :
+ 			print "Too many cpus assigned - reduce block size or reduce MPI world size"
+ 			print "Only need a max of %s total MPI ranks" %(total_blocks + 1)
+ 			raise RuntimeError('Ranks assigned exceeds number of image blocks to process')
+ 			comm.Abort()
+ 
+-		assigned_blocks = []
+-		for x in range(0, total_blocks, rank_blocks):
+-			max_x = x + rank_blocks
+-			ylist = []
+-			if max_x > total_blocks:
+-				max_x = total_blocks	
+-			for y in range(x, max_x):
+-				ylist.append(y)
+-			assigned_blocks.append(ylist)
++		blockAssignment = createBlockAssignments(totalNumBlocks, rankBlocks)
+ 				
+ 	else:
+-		assigned_blocks = None
+-		block_coords = None
+-		total_blocks = None
++		blockAssignment = None
++		blockLocation = None
++		totalNumBlocks = None
+ 
+ 	# Broadcast to all ranks
+-	assigned_blocks = comm.bcast(assigned_blocks, root=0)
+-	block_coords = comm.bcast(block_coords, root=0)
+-	total_blocks = comm.bcast(total_blocks, root=0)
++	blockAssignment = comm.bcast(blockAssignment, root=0)
++	blockLocation = comm.bcast(blockLocation, root=0)
++	totalNumBlocks = comm.bcast(totalNumBlocks, root=0)
+ 
+ 	# Wait for everyone to get the info
+ 	comm.barrier()
+ 
+ 	if rank != 0:
+-		for block_index in range(len(assigned_blocks[rank - 1])): 
+-			block_id = assigned_blocks[rank-1][block_index]
+-			#print "block id", block_id, "has coords", block_coords[block_id][0], block_coords[block_id][1], block_coords[block_id][2], block_coords[block_id][3]
+-			print "########################################"
+-			print "Rank ", rank, " is Processing block id", block_id, "with rows:", block_coords[block_id][0], "-", block_coords[block_id][1], " and columns:", block_coords[block_id][2], "-", block_coords[block_id][3], "..."
+-			result = my_stack.readBlock(block_coords[block_id][2], block_coords[block_id][3], block_coords[block_id][0], block_coords[block_id][1])
+-			#print result[1:3]
+-			in_block = result[0]
+-			result = processBlock(in_block)
+-			rout_block = result[0]
+-			comm.send(rout_block, tag=1, dest=0)
++		for block_index in range(len(blockAssignment[rank - 1])):
++
++			comm.send(createRouteBlocks(blockAssignment, blockLocation), tag=1, dest=0) 
++
+ 		# Tell the root we're done with our work
+ 		comm.send(rank, tag=9, dest=0)
+ 
+@@ -787,7 +855,7 @@
+ 				#print "Got rout_block and writing out_block"
+ 				status = my_stack.writeBlock(out_block)
+ 				#print "Rank 0:", status
+-				print total_blocks - out_blocks_recv, "blocks left to process out of", total_blocks
++				print totalNumBlocks - out_blocks_recv, "blocks left to process out of", totalNumBlocks
+ 				out_blocks_recv = out_blocks_recv + 1
+ 			elif comm.Iprobe(source=MPI.ANY_SOURCE, tag=9):
+ 				fin_rank.append(comm.recv(workerRank, source=MPI.ANY_SOURCE, tag=9))
