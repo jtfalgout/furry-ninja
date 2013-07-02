@@ -725,7 +725,7 @@ if __name__ == "__main__":
 	# some initial settings
 	# my_path = "025"
 	# my_row = "034"
-	# my_root_dir = "/data/landsat/FireECV/p" + my_path + "r" + my_row + "/"
+	# my_root_dir = "/data/Landsat/FireECV/p" + my_path + "r" + my_row + "/"
 	
 	#my_root_dir = args.my_base_dir + "/p" + args.my_path + "r" + args.my_row + "/"
 	#my_stack_file = my_root_dir + "test_tif_stack.csv" 	# small stack to test with
