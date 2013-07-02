@@ -5,6 +5,7 @@ import shelve
 import cProfile
 import socket
 import argparse
+import shutil
 
 import numpy as np
 np.seterr(divide='ignore')
