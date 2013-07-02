@@ -26,11 +26,14 @@ comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
 
-parser = argparser.ArgumentParser()
-parser.add_argument("pathNum", help="Number of path")
-parser.add_argument("--myPath", help="Path number input from command line args", action="store_true")
-parser.add_argument("outDirName", help="Name of file")
-parser.add_argument("--myOutputDir", help="File input from command line args", action="store_true")
+parser = argparse.ArgumentParser()
+parser.add_argument("--satPathNum", help="Number for satellite path")
+parser.add_argument("--satRowNum", help="Number for satellite path row")
+parser.add_argument("--myRootDir", help="Name for input file")
+parser.add_argument("--myOutputDir", help="Name for ouput file")
+parser.add_argument("--myShelfFile", help="Name for shelf file")
+parser.add_argument("--blockRows", help="Number for size of block rows")
+parser.add_argument("--blockCols", help="Number for size of block columns")
 args = parser.parse_args()
 
 class Stack:
@@ -720,23 +723,23 @@ if __name__ == "__main__":
 	# some initial settings
 	# my_path = "025"
 	# my_row = "034"
-	# my_root_dir = "/data/landsat/FireECV/p" + my_path + "r" + my_row + "/"
+	# my_root_dir = "/data/Landsat/FireECV/p" + my_path + "r" + my_row + "/"
 	
 	# command arg 1
-	if args.myPath:
-		my_path = args.pathNum
+	if args.satPathNum:
+		my_path = args.satPathNum
 	else: 
 		print "Invalid path number"
 
 	# command arg 2
-	if args.myRow:
-		my_row = args.rowNum
+	if args.satRowNum:
+		my_row = args.satRowNum
 	else:
 		print "Invalid row number"
 
 	# command arg 3
 	if args.myRootDir:
-		my_root_dir = args.rootDirName + my_path + "r" + my_row + "/"
+		my_root_dir = args.myRootDir + my_path + "r" + my_row + "/"
 	else:
 		print "Invalid root directory"
 
@@ -747,7 +750,7 @@ if __name__ == "__main__":
 	# command arg 4
 	if args.myOutputDir:
 		# /work/Job number/test/
-		my_output_dir =  args.outDirName
+		my_output_dir =  args.myOutputDir
 	else:
 		print "Invalid output directory"
 
@@ -757,9 +760,9 @@ if __name__ == "__main__":
 	my_stack.output_dir = my_output_dir
 
 	# command arg 5
-	# my_shelf_file = "/data/landsat/FireECV/furry-ninja/python_mpi/East.shelf"
+	# my_shelf_file = "/data/Landsat/FireECV/furry-ninja/python_mpi/East.shelf"
 	if args.myShelfFile:
-		my_shelf_file = args.shelfFileName
+		my_shelf_file = args.myShelfFile
 	else:
 		print "Invalid shelf file"
 
@@ -789,13 +792,13 @@ if __name__ == "__main__":
 
 	# command arg 6 
 	if args.blockRows:
-		block_rows = args.bRows
+		block_rows = args.blockRows
 	else:
 		print "Invalid block rows"
 	
 	# command arg 7
 	if args.blockCols:
-		block_cols = args.bCols
+		block_cols = args.blockCols
 	else:
 		print "Invalid block cols"
 
