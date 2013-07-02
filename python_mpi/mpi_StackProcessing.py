@@ -26,11 +26,16 @@ comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
 
-parser = argparser.ArgumentParser()
-parser.add_argument("pathNum", help="Number of path")
-parser.add_argument("--myPath", help="Path number input from command line args", action="store_true")
-parser.add_argument("outDirName", help="Name of file")
-parser.add_argument("--myOutputDir", help="File input from command line args", action="store_true")
+parser = argparse.ArgumentParser()
+parser.add_argument('-b', '--basedir', help="Base directory containing imagery and stack files. (Required)", required=True, dest='my_base_dir' )
+parser.add_argument('-o', '--outputdir', help="Output directory. (Required)", required=True, dest='my_output_dir' )
+#parser.add_argument('-lp', '--lpath', help="Landsat Path number. (Required)", required=True, dest='my_path' )
+#parser.add_argument('-lr', '--lrow', help="Landsat Row number. (Required)", required=True, dest='my_row' )
+parser.add_argument('-s', '--shelf', help="Shelf file. (Required)", required=True, dest='my_shelf_file' )
+parser.add_argument('-sf', '--stackfile', help="Stack file to read. (Required)", required=True, dest='my_stack_file' )
+parser.add_argument('-r', '--blockrows', type=int, default='256', help="Number of rows to process per cpu. Default %(default)s.", dest='block_rows')
+parser.add_argument('-c', '--blockcols', type=int, default='256', help="Number of colums to process per cpu. Default %(default)s.", dest='block_cols')
+
 args = parser.parse_args()
 
 class Stack:
@@ -707,7 +712,7 @@ def createBlockAssignments(totalBlocks, blockRank):
 			max_x = totalBlocks
 		for y in range(x, max_x):
 			ylist.append(y)
-		assignedBlocks.aapend(ylist)
+		assignedBlocks.append(ylist)
 
 	return assignedBlocks
 
@@ -722,48 +727,16 @@ if __name__ == "__main__":
 	# my_row = "034"
 	# my_root_dir = "/data/landsat/FireECV/p" + my_path + "r" + my_row + "/"
 	
-	# command arg 1
-	if args.myPath:
-		my_path = args.pathNum
-	else: 
-		print "Invalid path number"
+	#my_root_dir = args.my_base_dir + "/p" + args.my_path + "r" + args.my_row + "/"
+	#my_stack_file = my_root_dir + "test_tif_stack.csv" 	# small stack to test with
+	my_stack_file = args.my_base_dir + args.my_stack_file
+	my_input_dir = args.my_base_dir + "tif/"
 
-	# command arg 2
-	if args.myRow:
-		my_row = args.rowNum
-	else:
-		print "Invalid row number"
-
-	# command arg 3
-	if args.myRootDir:
-		my_root_dir = args.rootDirName + my_path + "r" + my_row + "/"
-	else:
-		print "Invalid root directory"
-
-	my_stack_file = my_root_dir + "test_tif_stack.csv" 	# small stack to test with
-
-	my_input_dir = my_root_dir + "tif/"
-
-	# command arg 4
-	if args.myOutputDir:
-		# /work/Job number/test/
-		my_output_dir =  args.outDirName
-	else:
-		print "Invalid output directory"
-
-	# create the stack object and set values
 	my_stack = Stack(my_stack_file)
 	my_stack.input_dir = my_input_dir
-	my_stack.output_dir = my_output_dir
+	my_stack.output_dir = args.my_output_dir
 
-	# command arg 5
-	# my_shelf_file = "/data/landsat/FireECV/furry-ninja/python_mpi/East.shelf"
-	if args.myShelfFile:
-		my_shelf_file = args.shelfFileName
-	else:
-		print "Invalid shelf file"
-
-	my_stack.openClassifier(my_shelf_file)
+	my_stack.openClassifier(args.my_shelf_file)
 
 	status = my_stack.openInputDatasets()
 	print status
@@ -781,27 +754,12 @@ if __name__ == "__main__":
 	if rank == 0: print "Off We Go"
 	#print status
 
-	##########
-	# loop through 'blocks' in the images
-	##########
 	max_row = my_stack.nRow
 	max_col = my_stack.nCol
 
-	# command arg 6 
-	if args.blockRows:
-		block_rows = args.bRows
-	else:
-		print "Invalid block rows"
-	
-	# command arg 7
-	if args.blockCols:
-		block_cols = args.bCols
-	else:
-		print "Invalid block cols"
-
 	#block_rows = 256
 	#block_cols = 256
-	num_blocks =  (max_row/block_rows)*(max_col/block_cols)
+	num_blocks =  (max_row/args.block_rows)*(max_col/args.block_cols)
 	blockLocation = [ ]
 	blockAssignment = [ ] 
 
@@ -809,7 +767,7 @@ if __name__ == "__main__":
 	if rank == 0:
 		
 		# Generate lists using generatedStackBlock function
-		totalNumBlocks, blockLocation = createStackBlocks(num_blocks, max_row, block_rows, max_col, block_cols)
+		totalNumBlocks, blockLocation = createStackBlocks(num_blocks, max_row, args.block_rows, max_col, args.block_cols)
 
 		if totalNumBlocks >= ( size - 1 ):
 			rankBlocks = totalNumBlocks/( size - 1 )
