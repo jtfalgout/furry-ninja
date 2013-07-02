@@ -829,7 +829,7 @@ if __name__ == "__main__":
 # Wait for everyone
 comm.barrier()
 
-# Celebrate - we're done. Close the output data
+# Celebrate - we're done. Close the output data and move the results the output location
 if rank==0:
 	zerohost = socket.gethostname()
 	print "Rank 0 was on ", zerohost
@@ -837,7 +837,8 @@ if rank==0:
 	print status
 
 	print "Moving results to", args.my_output_dir
-	shutil.move(args.my_scratch_dir + "/*", args.my_output_dir)
+	shutil.move(args.my_scratch_dir, args.my_output_dir)
+	print "Completed moving results"
 
 	end_time0 = time.time()
 	print 'Done! Total processing time = ' + str((end_time0 - start_time0)/60) + ' minutes.'
