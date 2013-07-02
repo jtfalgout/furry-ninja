@@ -28,7 +28,8 @@ size = comm.Get_size()
 rank = comm.Get_rank()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-b', '--basedir', help="Base directory containing imagery and stack files. (Required)", required=True, dest='my_base_dir' )
+parser.add_argument('-b', '--basedir', help="Base directory containing imagery and stack files. (Required)", required=True, dest='my_base_dir')
+parser.add_argument('-t', '--tmpdir', help="Scratch directory or temporary output directory. (Required)", required=True, dest='my_scratch_dir')
 parser.add_argument('-o', '--outputdir', help="Output directory. (Required)", required=True, dest='my_output_dir' )
 #parser.add_argument('-lp', '--lpath', help="Landsat Path number. (Required)", required=True, dest='my_path' )
 #parser.add_argument('-lr', '--lrow', help="Landsat Row number. (Required)", required=True, dest='my_row' )
@@ -735,7 +736,7 @@ if __name__ == "__main__":
 
 	my_stack = Stack(my_stack_file)
 	my_stack.input_dir = my_input_dir
-	my_stack.output_dir = args.my_output_dir
+	my_stack.output_dir = args.my_scratch_dir
 
 	my_stack.openClassifier(args.my_shelf_file)
 
@@ -834,6 +835,9 @@ if rank==0:
 	print "Rank 0 was on ", zerohost
 	status = my_stack.closeOutputData()
 	print status
+
+	print "Moving results to", args.my_output_dir
+	shutil.move(args.my_scratch_dir + "/*", args.my_output_dir)
 
 	end_time0 = time.time()
 	print 'Done! Total processing time = ' + str((end_time0 - start_time0)/60) + ' minutes.'
